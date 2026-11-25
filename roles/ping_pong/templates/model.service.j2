@@ -1,0 +1,19 @@
+[Unit]
+Description=FF ping-pong model ({{ item.role }})
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory={{ ff_app_dir }}
+Environment=FF_HW_CONCURRENCY={{ ff_hw_concurrency }}
+{% if item.role == 'ping' %}
+# Give remote pong a moment after boot/deploy
+ExecStartPre=/bin/sleep 2
+{% endif %}
+ExecStart={{ ff_app_dir }}/ping_pong_model -c {{ ff_app_dir }}/config_{{ item.role }}.json
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

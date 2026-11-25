@@ -1,0 +1,86 @@
+---
+- name: Ensure app and log directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - "{{ ff_app_dir }}"
+    - "{{ ff_log_dir }}"
+
+- name: Install Go binary
+  copy:
+    src: "{{ playbook_dir }}/../bin/{{ ff_binary_src | default('ping_pong_model_linux') }}"
+    dest: "{{ ff_app_dir }}/ping_pong_model"
+    mode: "0755"
+
+- name: Open UDP 19090 if ufw exists
+  shell: |
+    if command -v ufw >/dev/null 2>&1; then
+      ufw allow 19090/udp || true
+    fi
+  args:
+    executable: /bin/bash
+  changed_when: false
+  failed_when: false
+
+- name: Render per-service JSON configs
+  template:
+    src: config.json.j2
+    dest: "{{ ff_app_dir }}/config_{{ item.role }}.json"
+    mode: "0644"
+  loop: "{{ ff_services }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Detect systemd
+  command: pidof systemd
+  register: ff_systemd
+  changed_when: false
+  failed_when: false
+
+- name: Install systemd units
+  when: ff_systemd.rc == 0
+  template:
+    src: model.service.j2
+    dest: "/etc/systemd/system/ff-{{ item.role }}.service"
+    mode: "0644"
+  loop: "{{ ff_services }}"
+  loop_control:
+    label: "{{ item.name }}"
+  notify: reload systemd
+
+- name: Flush handlers before start
+  when: ff_systemd.rc == 0
+  meta: flush_handlers
+
+- name: Start via systemd
+  when: ff_systemd.rc == 0
+  service:
+    name: "ff-{{ item.role }}"
+    state: restarted
+    enabled: true
+  loop: "{{ ff_services | sort(attribute='role', reverse=true) }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Start via pidfile (Docker, no systemd)
+  when: ff_systemd.rc != 0
+  shell: |
+    set -e
+    PIDFILE="/var/run/ff-{{ item.role }}.pid"
+    if [ -f "$PIDFILE" ]; then
+      kill "$(cat "$PIDFILE")" 2>/dev/null || true
+      rm -f "$PIDFILE"
+    fi
+    setsid env FF_HW_CONCURRENCY={{ ff_hw_concurrency }} \
+      "{{ ff_app_dir }}/ping_pong_model" -c "{{ ff_app_dir }}/config_{{ item.role }}.json" \
+      >>"{{ ff_log_dir }}/nohup_{{ item.role }}.log" 2>&1 </dev/null &
+    echo $! > "$PIDFILE"
+    sleep 1
+    kill -0 "$(cat "$PIDFILE")"
+  args:
+    executable: /bin/bash
+  loop: "{{ ff_services | sort(attribute='role', reverse=true) }}"
+  loop_control:
+    label: "{{ item.name }}"

@@ -1,0 +1,9 @@
+---
+ff_os_cores: [0]
+ff_isolated_cores: [1, 3]
+ff_base_reboot: false
+ff_disable_irqbalance: true
+# sysctl stubs — safe defaults for containers / demo hosts
+ff_sysctl:
+  kernel.watchdog: 0
+  vm.stat_interval: 10

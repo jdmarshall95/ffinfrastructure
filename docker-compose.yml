@@ -1,0 +1,7 @@
+services:
+  host-a:
+    image: geerlingguy/docker-ubuntu2204-ansible
+    container_name: host-a
+    hostname: host-a
+    privileged: true
+    command: sleep infinity

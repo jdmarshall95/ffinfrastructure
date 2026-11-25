@@ -1,0 +1,4 @@
+---
+- name: remind reboot
+  debug:
+    msg: "ff_base_reboot=true — run update-grub && reboot on a real host before relying on isolcpus."

@@ -1,0 +1,22 @@
+# Демо «две тачки» (YC). Ping-сторона.
+
+cpu_vendor: amd
+hyper_threading: false
+ff_os_cores: [0]
+ff_isolated_cores: [1]
+ff_hw_concurrency: 2
+ff_base_reboot: false
+
+host_roles:
+  - base
+  - ping_pong
+
+ff_services:
+  - name: ping
+    role: ping
+    pin_slot: 0
+    peer_host: host-intel-ht
+    frequency_us: 100
+    statistic_wait_ms: 1000
+    statistic_window_ms: 10000
+    log_info_stat: true

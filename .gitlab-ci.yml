@@ -1,0 +1,24 @@
+stages: [base, services]
+
+variables:
+  ANSIBLE_FORCE_COLOR: "true"
+
+.ansible:
+  image: cytopia/ansible:latest
+  before_script:
+    - pip install -r requirements.txt
+  rules:
+    - when: manual
+
+base:
+  extends: .ansible
+  stage: base
+  script:
+    - ansible-playbook -i inventory/hosts.yml top/base.yml
+
+services:
+  extends: .ansible
+  stage: services
+  script:
+    - GOOS=linux GOARCH=amd64 go build -o bin/ping_pong_model_linux ./cmd/ping_pong_model
+    - ansible-playbook -i inventory/hosts.yml top/services.yml

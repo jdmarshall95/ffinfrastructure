@@ -1,0 +1,10 @@
+# Как target на roles.base в salt: только ось, редко.
+---
+- name: top — base
+  hosts: all
+  become: true
+  vars_files:
+    - "{{ playbook_dir }}/../nodes/hosts/{{ inventory_hostname }}.yml"
+  roles:
+    - role: base
+      when: "'base' in host_roles | default([])"

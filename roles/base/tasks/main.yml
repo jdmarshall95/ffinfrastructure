@@ -1,0 +1,71 @@
+---
+- name: Ensure marker dir for applied base profile
+  file:
+    path: /etc/ff
+    state: directory
+    mode: "0755"
+
+- name: Record hardware profile (from inventory, not real CPUID)
+  copy:
+    dest: /etc/ff/hardware.json
+    mode: "0644"
+    content: |
+      {
+        "cpu_vendor": "{{ cpu_vendor | default('unknown') }}",
+        "hyper_threading": {{ hyper_threading | default(false) | bool | lower }},
+        "os_cores": {{ ff_os_cores | to_json }},
+        "isolated_cores": {{ ff_isolated_cores | to_json }},
+        "hw_concurrency": {{ ff_hw_concurrency | default(8) }}
+      }
+
+- name: Disable irqbalance when unit exists
+  when: ff_disable_irqbalance | bool
+  block:
+    - name: Stop irqbalance
+      service:
+        name: irqbalance
+        state: stopped
+        enabled: false
+      failed_when: false
+
+- name: Pin default IRQ affinity to first OS core (best-effort)
+  shell: |
+    OS_CORE="{{ ff_os_cores[0] }}"
+    if [ -w /proc/irq/default_smp_affinity ]; then
+      MASK=$(printf '%x' $((1 << OS_CORE)))
+      echo "$MASK" > /proc/irq/default_smp_affinity || true
+      for d in /proc/irq/[0-9]*; do
+        [ -w "$d/smp_affinity_list" ] || continue
+        echo "$OS_CORE" > "$d/smp_affinity_list" 2>/dev/null || true
+      done
+    fi
+  args:
+    executable: /bin/bash
+  changed_when: false
+  failed_when: false
+
+- name: Apply sysctl stubs where supported
+  sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    state: present
+    sysctl_set: true
+    reload: true
+  loop: "{{ ff_sysctl | dict2items }}"
+  failed_when: false
+
+- name: Render GRUB isolcpus snippet (only when reboot flag set)
+  when: ff_base_reboot | bool
+  template:
+    src: grub-ff.cfg.j2
+    dest: /etc/default/grub.d/99-ff-isolcpus.cfg
+    mode: "0644"
+  notify: remind reboot
+
+- name: Write base applied stamp
+  copy:
+    dest: /etc/ff/base-applied
+    mode: "0644"
+    content: |
+      profile={{ cpu_vendor | default('unknown') }} ht={{ hyper_threading | default(false) }}
+      reboot_pending={{ ff_base_reboot }}

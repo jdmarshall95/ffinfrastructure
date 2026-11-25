@@ -1,0 +1,25 @@
+# Как накат ролей приложений в salt: отдельно от base, чаще.
+# Сначала хосты с pong, потом чистый ping (чтобы было к кому стучаться).
+---
+- name: top — ping_pong (сторона pong)
+  hosts: all
+  become: true
+  vars_files:
+    - "{{ playbook_dir }}/../nodes/hosts/{{ inventory_hostname }}.yml"
+  roles:
+    - role: ping_pong
+      when: >-
+        'ping_pong' in host_roles | default([])
+        and (ff_services | default([]) | selectattr('role', 'equalto', 'pong') | list | length > 0)
+
+- name: top — ping_pong (сторона ping)
+  hosts: all
+  become: true
+  vars_files:
+    - "{{ playbook_dir }}/../nodes/hosts/{{ inventory_hostname }}.yml"
+  roles:
+    - role: ping_pong
+      when: >-
+        'ping_pong' in host_roles | default([])
+        and (ff_services | default([]) | selectattr('role', 'equalto', 'ping') | list | length > 0)
+        and (ff_services | default([]) | selectattr('role', 'equalto', 'pong') | list | length == 0)

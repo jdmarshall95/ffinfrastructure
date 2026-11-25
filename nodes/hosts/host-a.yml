@@ -1,0 +1,27 @@
+# что на этой машине (железо + какие роли накатывать + сервисы).
+
+cpu_vendor: intel
+hyper_threading: true
+ff_os_cores: [0]
+ff_isolated_cores: [1, 3]
+ff_hw_concurrency: 8
+ff_base_reboot: false
+ff_private_ip: 127.0.0.1
+
+# В salt это pillar `roles`. В Ansible слово roles занято — поэтому host_roles.
+host_roles:
+  - base
+  - ping_pong
+
+# Сервисный слой (меняется чаще base). В проде мог бы быть другой git/CMDB.
+ff_services:
+  - name: pong
+    role: pong
+    pin_slot: 0
+  - name: ping
+    role: ping
+    pin_slot: 1
+    frequency_us: 100
+    statistic_wait_ms: 1000
+    statistic_window_ms: 10000
+    log_info_stat: true

@@ -1,0 +1,18 @@
+# Демо «две тачки» (YC). Pong-сторона.
+
+cpu_vendor: intel
+hyper_threading: true
+ff_os_cores: [0]
+ff_isolated_cores: [1]
+ff_hw_concurrency: 2
+ff_base_reboot: false
+
+host_roles:
+  - base
+  - ping_pong
+
+ff_services:
+  - name: pong
+    role: pong
+    pin_slot: 0
+    listen: ":19090"
