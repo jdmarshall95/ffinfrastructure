@@ -1,4 +1,4 @@
-# Демо «две тачки» (YC). Ping-сторона.
+# Пример второго типа машины (AMD, без HT). Ping-сторона.
 
 cpu_vendor: amd
 hyper_threading: false

@@ -1,4 +1,4 @@
-# Демо «две тачки» (YC). Pong-сторона.
+# Пример второго типа машины (Intel + HT). Pong-сторона.
 
 cpu_vendor: intel
 hyper_threading: true
