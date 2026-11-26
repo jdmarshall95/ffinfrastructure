@@ -41,7 +41,7 @@ variable "memory_gb" {
 variable "disk_gb" {
   type        = number
   default     = 8
-  description = "Boot disk GB. ubuntu-2204-lts minimum is 8."
+  description = "Boot disk GB. ubuntu-2404-lts minimum is 8."
 }
 
 variable "core_fraction" {

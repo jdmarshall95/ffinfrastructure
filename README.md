@@ -37,10 +37,10 @@ pip install -r requirements.txt
 ## Run
 
 ```bash
-docker compose up -d --build
-make build-linux
-make base-local
-make services-local
+docker compose up -d
+GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o bin/ping_pong_model_linux ./cmd/ping_pong_model
+ansible-playbook -i inventory/hosts.yml top/base.yml
+ansible-playbook -i inventory/hosts.yml top/services.yml
 docker compose exec host-a tail -f /var/log/ff/log_ping.txt
 ```
 

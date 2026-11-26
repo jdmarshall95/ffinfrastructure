@@ -1,6 +1,6 @@
 services:
   host-a:
-    image: geerlingguy/docker-ubuntu2204-ansible
+    image: geerlingguy/docker-ubuntu2404-ansible
     container_name: host-a
     hostname: host-a
     privileged: true
