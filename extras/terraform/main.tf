@@ -52,13 +52,6 @@ resource "yandex_vpc_security_group" "ff" {
     v4_cidr_blocks = ["0.0.0.0/0"]
   }
 
-  ingress {
-    protocol       = "UDP"
-    description    = "ping-pong"
-    port           = 19090
-    v4_cidr_blocks = ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
-  }
-
   egress {
     protocol       = "ANY"
     v4_cidr_blocks = ["0.0.0.0/0"]
@@ -82,7 +75,7 @@ locals {
       hyper_threading = true
       ff_os_cores     = [0]
       ff_isolated     = [1]
-      role_label      = "pong"
+      role_label      = "ping_pong"
     }
     # Своя конфигурация, как в консоли: AMD Zen 4, 2 vCPU, 20%, 1 ГБ, не прерываемая.
     # На standard-v4a при 20% минимум — 2 vCPU и 1 ГБ.
@@ -96,7 +89,7 @@ locals {
       hyper_threading = false
       ff_os_cores     = [0]
       ff_isolated     = [1]
-      role_label      = "ping"
+      role_label      = "ping_pong"
     }
   }
 }

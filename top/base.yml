@@ -1,4 +1,3 @@
-# Как target на roles.base в salt: только ось, редко.
 ---
 - name: top — base
   hosts: all

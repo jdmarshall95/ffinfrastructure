@@ -14,15 +14,10 @@
     dest: "{{ ff_app_dir }}/ping_pong_model"
     mode: "0755"
 
-- name: Open UDP 19090 if ufw exists
-  shell: |
-    if command -v ufw >/dev/null 2>&1; then
-      ufw allow 19090/udp || true
-    fi
-  args:
-    executable: /bin/bash
-  changed_when: false
-  failed_when: false
+- name: Drop leftover shared-memory file before restart
+  file:
+    path: "{{ ff_shm_path }}"
+    state: absent
 
 - name: Render per-service JSON configs
   template:

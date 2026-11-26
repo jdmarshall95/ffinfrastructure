@@ -1,15 +1,7 @@
 {% set hw = ff_hw_concurrency | int %}
 {% set core = ff_isolated_cores[item.pin_slot | int] | int %}
 {% set mask = ('0' * core) ~ '1' ~ ('0' * (hw - core - 1)) %}
-{% set listen = item.listen | default(':19090') %}
-{% if item.peer_host is defined %}
-{% set peer = hostvars[item.peer_host].ff_private_ip | default(hostvars[item.peer_host].ansible_host) %}
-{% set peer_addr = peer ~ (listen if listen.startswith(':') else ':' ~ (listen.split(':')[-1])) %}
-{% elif item.peer_addr is defined %}
-{% set peer_addr = item.peer_addr %}
-{% else %}
-{% set peer_addr = '127.0.0.1' ~ (listen if listen.startswith(':') else ':19090') %}
-{% endif %}
+{% set shm_path = item.shm_path | default(ff_shm_path) %}
 {
   "name": "{{ item.role }}",
   "logger": {
@@ -33,8 +25,7 @@
   "meta_config": {
     "role": "{{ item.role }}",
     "frequency_us": {{ item.frequency_us | default(100) }},
-    "listen": "{{ listen }}",
-    "peer_addr": "{{ peer_addr }}"
+    "shm_path": "{{ shm_path }}"
 {% if item.role == 'ping' %}
     ,"statistic_wait_ms": {{ item.statistic_wait_ms | default(1000) }}
     ,"statistic_window_ms": {{ item.statistic_window_ms | default(10000) }}

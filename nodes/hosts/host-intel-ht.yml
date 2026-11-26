@@ -1,4 +1,5 @@
-# Пример второго типа машины (Intel + HT). Pong-сторона.
+# Пример второго типа машины (Intel + HT).
+# Ping и pong на этой же машине, общий /dev/shm/ff-ping-pong.
 
 cpu_vendor: intel
 hyper_threading: true
@@ -15,4 +16,10 @@ ff_services:
   - name: pong
     role: pong
     pin_slot: 0
-    listen: ":19090"
+  - name: ping
+    role: ping
+    pin_slot: 0
+    frequency_us: 100
+    statistic_wait_ms: 1000
+    statistic_window_ms: 10000
+    log_info_stat: true

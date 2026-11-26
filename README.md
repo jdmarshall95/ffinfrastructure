@@ -1,12 +1,5 @@
 # Управление конфигурацией серверов — MVP
 
-Сдача: публичный gitlab.com + этот README.
-
-
-Схема как у Salt: `nodes/hosts` → `roles` → `top` (вместо salt-ssh — Ansible).
-
----
-
 ## Идея
 
 Ось (`roles/base`) накатываем редко. Приложения (`roles/ping_pong`) — отдельно и чаще.  
@@ -36,8 +29,8 @@ pip install -r requirements.txt
 
 ## Configure
 
-Правь `nodes/hosts/host-a.yml` (тип машины, `host_roles`, `ff_services`).  
-`inventory/hosts.yml` — только как достучаться до контейнера.
+`nodes/hosts/host-a.yml` тип машины, `host_roles`, `ff_services`
+`inventory/hosts.yml` на какие узлы применяем
 
 ---
 

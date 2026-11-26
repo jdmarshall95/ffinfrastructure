@@ -3,4 +3,5 @@ ff_app_dir: /opt/ff/ping-pong
 ff_log_dir: /var/log/ff
 ff_hw_concurrency: 8
 ff_binary_src: ping_pong_model_linux
+ff_shm_path: /dev/shm/ff-ping-pong
 ff_services: []

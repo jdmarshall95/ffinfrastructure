@@ -1,23 +1,24 @@
 // ping_pong_model — Go-версия утилиты с собеса.
 // CLI: ./ping_pong_model -c config.json
-// Транспорт: UDP (на одной машине или между двумя ВМ через peer_addr).
+// Транспорт: shared memory. Ping и pong на одной машине, общий файл в /dev/shm.
 package main
 
 import (
-	"bytes"
-	"encoding/binary"
 	"encoding/json"
 	"flag"
 	"fmt"
-	"net"
 	"os"
 	"os/signal"
 	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
+	"unsafe"
+
+	"golang.org/x/sys/unix"
 )
 
 type config struct {
@@ -30,7 +31,7 @@ type config struct {
 		IsServer bool   `json:"is_server"`
 	} `json:"meta_models"`
 	ModelID string `json:"model_id"`
-	MetaCfg meta  `json:"meta_config"`
+	MetaCfg meta   `json:"meta_config"`
 }
 
 type logger struct {
@@ -44,8 +45,7 @@ type meta struct {
 	StatisticWaitMS   int    `json:"statistic_wait_ms"`
 	StatisticWindowMS int    `json:"statistic_window_ms"`
 	LogInfoStat       bool   `json:"log_info_stat"`
-	Listen            string `json:"listen"`    // e.g. ":19090"
-	PeerAddr          string `json:"peer_addr"` // e.g. "10.0.0.12:19090" for ping
+	ShmPath           string `json:"shm_path"`
 }
 
 func main() {
@@ -113,8 +113,8 @@ func loadConfig(path string) (*config, error) {
 	if cfg.MetaCfg.StatisticWindowMS == 0 {
 		cfg.MetaCfg.StatisticWindowMS = 10000
 	}
-	if cfg.MetaCfg.Listen == "" {
-		cfg.MetaCfg.Listen = ":19090"
+	if cfg.MetaCfg.ShmPath == "" {
+		cfg.MetaCfg.ShmPath = "/dev/shm/ff-ping-pong"
 	}
 	if cfg.Logger.LogPath == "" {
 		cfg.Logger.LogPath = fmt.Sprintf("/tmp/log_%s.txt", cfg.MetaCfg.Role)
@@ -169,74 +169,116 @@ func dirOf(path string) string {
 	return path[:i]
 }
 
-func pack(ts uint64) []byte {
-	buf := make([]byte, 12)
-	copy(buf[:4], []byte("FFPP"))
-	binary.BigEndian.PutUint64(buf[4:], ts)
-	return buf
+// Сегмент общий для двух процессов на одной машине.
+//
+//	0: seq — ping увеличивает после записи ts
+//	8: ts  — метка ping
+//
+// 16: ack — pong повторяет seq, который уже увидел
+const shmBytes = 32
+
+type shmSeg struct {
+	b []byte
+	f *os.File
 }
 
-func unpack(b []byte) (uint64, bool) {
-	if len(b) < 12 || !bytes.Equal(b[:4], []byte("FFPP")) {
-		return 0, false
+func (s *shmSeg) word(off int) *uint64 {
+	return (*uint64)(unsafe.Add(unsafe.Pointer(&s.b[0]), off))
+}
+
+func (s *shmSeg) close() {
+	_ = unix.Munmap(s.b)
+	_ = s.f.Close()
+}
+
+func openShm(path string) (*shmSeg, error) {
+	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0o666)
+	if err != nil {
+		return nil, err
 	}
-	return binary.BigEndian.Uint64(b[4:]), true
+	fi, err := f.Stat()
+	if err != nil {
+		f.Close()
+		return nil, err
+	}
+	fresh := fi.Size() != shmBytes
+	if fresh {
+		if err := f.Truncate(shmBytes); err != nil {
+			f.Close()
+			return nil, err
+		}
+	}
+	b, err := unix.Mmap(int(f.Fd()), 0, shmBytes, unix.PROT_READ|unix.PROT_WRITE, unix.MAP_SHARED)
+	if err != nil {
+		f.Close()
+		return nil, err
+	}
+	s := &shmSeg{b: b, f: f}
+	if fresh {
+		atomic.StoreUint64(s.word(0), 0)
+		atomic.StoreUint64(s.word(8), 0)
+		atomic.StoreUint64(s.word(16), 0)
+	}
+	return s, nil
+}
+
+func (s *shmSeg) roundtrip(timeout time.Duration) (float64, bool) {
+	t0 := time.Now()
+	atomic.StoreUint64(s.word(8), uint64(t0.UnixNano()))
+	seq := atomic.AddUint64(s.word(0), 1)
+	deadline := time.Now().Add(timeout)
+	for {
+		if atomic.LoadUint64(s.word(16)) == seq {
+			return float64(time.Since(t0)) / float64(time.Microsecond), true
+		}
+		if time.Now().After(deadline) {
+			return 0, false
+		}
+	}
 }
 
 func runPong(cfg *config, stop <-chan os.Signal) error {
-	pc, err := net.ListenPacket("udp", cfg.MetaCfg.Listen)
+	shm, err := openShm(cfg.MetaCfg.ShmPath)
 	if err != nil {
 		return err
 	}
-	defer pc.Close()
+	defer shm.close()
 	logLine(cfg.Logger.LogPath, fmt.Sprintf(
-		"Init: role = pong, frequency_us = %d, service_thread_mask = %q, listen = %s",
-		cfg.MetaCfg.FrequencyUS, cfg.Service, cfg.MetaCfg.Listen,
+		"Init: role = pong, frequency_us = %d, service_thread_mask = %q, shm = %s",
+		cfg.MetaCfg.FrequencyUS, cfg.Service, cfg.MetaCfg.ShmPath,
 	))
-	logLine(cfg.Logger.LogPath, "Role pong publishes to PONG and listens PING")
+	logLine(cfg.Logger.LogPath, "Role pong mirrors ping timestamps in shared memory")
 
-	buf := make([]byte, 64)
+	var last uint64
 	for {
+		seq := atomic.LoadUint64(shm.word(0))
+		if seq != last {
+			_ = atomic.LoadUint64(shm.word(8))
+			atomic.StoreUint64(shm.word(16), seq)
+			last = seq
+		}
 		select {
 		case <-stop:
 			logLine(cfg.Logger.LogPath, "Stop")
 			return nil
 		default:
 		}
-		_ = pc.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
-		n, addr, err := pc.ReadFrom(buf)
-		if err != nil {
-			if ne, ok := err.(net.Error); ok && ne.Timeout() {
-				continue
-			}
-			continue
-		}
-		if ts, ok := unpack(buf[:n]); ok {
-			_, _ = pc.WriteTo(pack(ts), addr)
-		}
 	}
 }
 
 func runPing(cfg *config, stop <-chan os.Signal) error {
-	if cfg.MetaCfg.PeerAddr == "" {
-		cfg.MetaCfg.PeerAddr = "127.0.0.1" + ensurePort(cfg.MetaCfg.Listen)
-	}
-	peer, err := net.ResolveUDPAddr("udp", cfg.MetaCfg.PeerAddr)
+	shm, err := openShm(cfg.MetaCfg.ShmPath)
 	if err != nil {
 		return err
 	}
-	conn, err := net.ListenUDP("udp", nil)
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
+	defer shm.close()
 
 	logLine(cfg.Logger.LogPath, fmt.Sprintf(
-		"Init: role = ping, frequency_us = %d, service_thread_mask = %q, peer = %s",
-		cfg.MetaCfg.FrequencyUS, cfg.Service, cfg.MetaCfg.PeerAddr,
+		"Init: role = ping, frequency_us = %d, service_thread_mask = %q, shm = %s",
+		cfg.MetaCfg.FrequencyUS, cfg.Service, cfg.MetaCfg.ShmPath,
 	))
 	logLine(cfg.Logger.LogPath, fmt.Sprintf(
-		"Role ping publishes to PING and listens PONG. Statistic cycle: warmup %d ms, window %d ms",
+		"Role ping publishes to PING and listens PONG via shared memory. Statistic cycle: warmup %d ms, window %d ms",
 		cfg.MetaCfg.StatisticWaitMS, cfg.MetaCfg.StatisticWindowMS,
 	))
 
@@ -252,7 +294,6 @@ func runPing(cfg *config, stop <-chan os.Signal) error {
 		}
 	}
 
-	buf := make([]byte, 64)
 	deadline := time.Now().Add(15 * time.Second)
 	for time.Now().Before(deadline) {
 		select {
@@ -261,14 +302,8 @@ func runPing(cfg *config, stop <-chan os.Signal) error {
 			return nil
 		default:
 		}
-		ts := uint64(time.Now().UnixNano())
-		_, _ = conn.WriteToUDP(pack(ts), peer)
-		_ = conn.SetReadDeadline(time.Now().Add(50 * time.Millisecond))
-		n, _, err := conn.ReadFromUDP(buf)
-		if err == nil {
-			if got, ok := unpack(buf[:n]); ok && got == ts {
-				break
-			}
+		if _, ok := shm.roundtrip(50 * time.Millisecond); ok {
+			break
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
@@ -280,8 +315,15 @@ func runPing(cfg *config, stop <-chan os.Signal) error {
 			return nil
 		default:
 		}
-		burst(conn, peer, buf, wait, interval, stop)
-		rtts := burst(conn, peer, buf, window, interval, stop)
+		if _, stopped := burst(shm, wait, interval, stop); stopped {
+			logLine(cfg.Logger.LogPath, "Stop")
+			return nil
+		}
+		rtts, stopped := burst(shm, window, interval, stop)
+		if stopped {
+			logLine(cfg.Logger.LogPath, "Stop")
+			return nil
+		}
 		if len(rtts) == 0 {
 			continue
 		}
@@ -316,37 +358,19 @@ func runPing(cfg *config, stop <-chan os.Signal) error {
 	}
 }
 
-func burst(conn *net.UDPConn, peer *net.UDPAddr, buf []byte, dur, interval time.Duration, stop <-chan os.Signal) []float64 {
+func burst(shm *shmSeg, dur, interval time.Duration, stop <-chan os.Signal) ([]float64, bool) {
 	var rtts []float64
 	end := time.Now().Add(dur)
 	for time.Now().Before(end) {
 		select {
 		case <-stop:
-			return rtts
+			return rtts, true
 		default:
 		}
-		t0 := time.Now()
-		ts := uint64(t0.UnixNano())
-		_, _ = conn.WriteToUDP(pack(ts), peer)
-		_ = conn.SetReadDeadline(time.Now().Add(10 * time.Millisecond))
-		n, _, err := conn.ReadFromUDP(buf)
-		if err == nil {
-			if got, ok := unpack(buf[:n]); ok && got == ts {
-				rtts = append(rtts, float64(time.Since(t0))/float64(time.Microsecond))
-			}
+		if rtt, ok := shm.roundtrip(10 * time.Millisecond); ok {
+			rtts = append(rtts, rtt)
 		}
 		time.Sleep(interval)
 	}
-	return rtts
-}
-
-func ensurePort(listen string) string {
-	if strings.HasPrefix(listen, ":") {
-		return listen
-	}
-	_, port, err := net.SplitHostPort(listen)
-	if err != nil {
-		return ":19090"
-	}
-	return ":" + port
+	return rtts, false
 }

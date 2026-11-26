@@ -1,4 +1,5 @@
-# Пример второго типа машины (AMD, без HT). Ping-сторона.
+# Пример второго типа машины (AMD, без HT).
+# Ping и pong на этой же машине, общий /dev/shm/ff-ping-pong.
 
 cpu_vendor: amd
 hyper_threading: false
@@ -12,10 +13,12 @@ host_roles:
   - ping_pong
 
 ff_services:
+  - name: pong
+    role: pong
+    pin_slot: 0
   - name: ping
     role: ping
     pin_slot: 0
-    peer_host: host-intel-ht
     frequency_us: 100
     statistic_wait_ms: 1000
     statistic_window_ms: 10000
