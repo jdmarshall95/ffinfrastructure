@@ -20,5 +20,5 @@ services:
   extends: .ansible
   stage: services
   script:
-    - GOOS=linux GOARCH=amd64 go build -o bin/ping_pong_model_linux ./cmd/ping_pong_model
+    - GOOS=linux GOARCH=amd64 go build -o bin/ping_pong_model ./cmd/ping_pong_model
     - ansible-playbook -i inventory/hosts.yml top/services.yml

@@ -20,8 +20,8 @@
 ## Install
 
 ```bash
-git clone <gitlab-url>
-cd ffinfrastructure-submit
+git clone https://github.com/jdmarshall95/ffinfrastructure.git
+cd ffinfrastructure
 pip install -r requirements.txt
 ```
 
@@ -38,20 +38,34 @@ pip install -r requirements.txt
 
 Ansible запускается на своей машине и заходит в контейнер `host-a` через Docker. Контейнер сам ничего не настраивает.
 
+пустая Ubuntu 24.04
 ```bash
-# пустая Ubuntu 24.04
 docker compose up -d
+```
 
-# бинарь собирается здесь, в контейнер его копирует playbook сервисов
-GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o bin/ping_pong_model_linux ./cmd/ping_pong_model
+Бинарь лежит в `bin/` и в git не входит. Playbook сервисов копирует его в контейнер. Для проверки собран свой вариант: тот же запуск, что у бинаря с прошлого этапа.
 
-# sysctl, IRQ
+```bash
+GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o bin/ping_pong_model ./cmd/ping_pong_model
+```
+
+Их бинарь кладётся на то же место, без сборки:
+
+```bash
+cp /path/to/binary bin/ping_pong_model
+```
+
+sysctl, IRQ
+```bash
 ansible-playbook -i inventory/hosts.yml top/base.yml
+```
 
-# сервисы: бинарь, два JSON, pong, потом ping. Общий файл /dev/shm/ff-ping-pong
+Cервисы: бинарь, два JSON, pong, потом ping. Общий файл /dev/shm/ff-ping-pong
+```bash
 ansible-playbook -i inventory/hosts.yml top/services.yml
-
-# в логе ждём Statistic window … rtt_us …
+```
+В логе ждём Statistic window … rtt_us …
+```bash
 docker compose exec host-a tail -f /var/log/ff/log_ping.txt
 ```
 

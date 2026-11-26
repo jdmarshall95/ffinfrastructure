@@ -10,7 +10,7 @@
 
 - name: Install Go binary
   copy:
-    src: "{{ playbook_dir }}/../bin/{{ ff_binary_src | default('ping_pong_model_linux') }}"
+    src: "{{ playbook_dir }}/../bin/{{ ff_binary_src | default('ping_pong_model') }}"
     dest: "{{ ff_app_dir }}/ping_pong_model"
     mode: "0755"
 
