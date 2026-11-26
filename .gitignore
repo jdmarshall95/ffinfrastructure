@@ -18,3 +18,14 @@ bin/
 secrets/
 *.pem
 *.key
+id_rsa*
+credentials*
+extras/inventory/yc.hosts.yml
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log

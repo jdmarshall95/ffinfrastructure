@@ -1,0 +1,22 @@
+# cp terraform.tfvars.example terraform.tfvars
+# Values also via env: TF_VAR_cloud_id, TF_VAR_folder_id
+
+cloud_id  = "b1gxxxxxxxx"
+folder_id = "b1gxxxxxxxx"
+
+# Existing lab subnet (recommended) — from: yc vpc subnet list
+subnet_id = "e9bc19eotimhrmh6s1q0" # hft-lab-subnet-a
+
+zone          = "ru-central1-a"
+cores         = 2
+memory_gb     = 2
+disk_gb       = 8 # минимум образа; меньше (например 5) YC отклонит
+core_fraction = 20
+
+# Intel Ice Lake. AMD Zen 4 — standard-v4a (в ru-central1-d и ru-central1-e её нет).
+# Размер AMD задан в main.tf: 2 vCPU, 20%, 1 ГБ, не прерываемая.
+platform_intel = "standard-v3"
+platform_amd   = "standard-v4a"
+
+# Your laptop key (from YC profile / ssh-rsa ...). Deploy key still generated in .secrets/
+# ssh_public_keys = ["ssh-rsa AAAA... comment"]

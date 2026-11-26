@@ -20,6 +20,8 @@
 - Ansible ≥ 2.14
 - Go ≥ 1.22
 
+Опционально, две ВМ в Yandex Cloud: [extras/](extras/).
+
 ---
 
 ## Install
@@ -63,4 +65,5 @@ top/base.yml      # накат только base
 top/services.yml  # накат только сервисов
 inventory/        # коннект
 cmd/ping_pong_model/
+extras/           # не ядро задания: Terraform, две ВМ
 ```
